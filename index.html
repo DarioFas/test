@@ -46,7 +46,6 @@
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
         
-        // ADDED LIGHTING: Required for PBR textures to be visible
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
         scene.add(ambientLight);
         const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
@@ -54,14 +53,14 @@
         scene.add(sunLight);
 
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        camera.position.set(0, 150, 700); 
+        // Positioned back and slightly up for a more natural eye-level view
+        camera.position.set(0, 100, 1000); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
 
         const textureLoader = new THREE.TextureLoader();
-        // UPDATED: Loading the new PBR texture
         const charTexture = textureLoader.load('texture_pbr_v128.jpg');
 
         let mixer, clock = new THREE.Clock();
@@ -72,7 +71,6 @@
             
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    // Apply texture and ensure it reacts to light (MeshStandardMaterial)
                     child.material = new THREE.MeshStandardMaterial({ 
                         map: charTexture,
                         skinning: true 
@@ -80,18 +78,22 @@
                 }
             });
 
-            // Center and Auto-Scale logic
+            // --- BETTER CENTERING LOGIC ---
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
 
-            // Reset position to center
+            // Move the model so its center is exactly at (0,0,0)
             object.position.x = -center.x;
             object.position.y = -center.y;
             object.position.z = -center.z;
 
+            // Normalize size so it fits the frame perfectly
             const maxDim = Math.max(size.x, size.y, size.z);
-            object.scale.setScalar(450 / maxDim);
+            object.scale.setScalar(500 / maxDim);
+
+            // Point camera at the new local center of the model
+            camera.lookAt(0, 0, 0);
 
             mixer = new THREE.AnimationMixer(object);
             if (gltf.animations && gltf.animations.length > 0) {
@@ -103,7 +105,6 @@
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
         const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
-        // --- INPUT HANDLING ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
