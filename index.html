@@ -26,14 +26,12 @@
         let money = 2000;
         let gameState = "loading";
         let selectedArtist = null, selectedMusic = null, selectedDance = null;
-
         const previewAudio = new Audio('music.mp3');
 
         const assets = {
             cover: new Image(), studio: new Image(), studioBtn: new Image(),
             hireBtn: new Image(), hireBg: new Image(), backBtn: new Image(), 
-            mei: new Image(), videoBg: new Image(), musicBg: new Image(),
-            liveBg: new Image()
+            mei: new Image(), videoBg: new Image(), musicBg: new Image(), liveBg: new Image()
         };
         assets.cover.src = 'cover.jpg';
         assets.studio.src = 'main.jpg';
@@ -48,8 +46,8 @@
 
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 5000);
-        camera.position.set(0, 150, 500);
+        const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
+        camera.position.set(0, 150, 600); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
@@ -61,7 +59,6 @@
         let mixer, clock = new THREE.Clock();
         const loader = new THREE.FBXLoader();
         
-        // --- UPDATED: Loading Salsa.fbx instead of Hip Hop ---
         loader.load('Salsa.fbx', (object) => {
             object.traverse((child) => { 
                 if (child.isMesh) {
@@ -69,45 +66,35 @@
                 }
             });
 
-            // Center and scale the model automatically
             const box = new THREE.Box3().setFromObject(object);
-            const size = box.getSize(new THREE.Vector3()).length();
+            const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             object.position.x += (object.position.x - center.x);
             object.position.y += (object.position.y - center.y);
             object.position.z += (object.position.z - center.z);
-            object.scale.setScalar(300 / size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            object.scale.setScalar(400 / maxDim);
 
             mixer = new THREE.AnimationMixer(object);
-            if (object.animations.length > 0) {
+            if (object.animations && object.animations.length > 0) {
                 mixer.clipAction(object.animations[0]).play();
             }
             scene.add(object);
-        }, undefined, (error) => {
-            console.error("Error loading Salsa.fbx: ", error);
         });
 
-        const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei, available: true }];
-        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false, x: 20, y: 250, w: 680, h: 200 }];
-        const studioButtons = [
-            { text: "HIRE", x: 40, y: 300, w: 300, h: 160 },
-            { text: "MUSIC", x: 380, y: 300, w: 300, h: 160 }, 
-            { text: "VIDEO", x: 210, y: 500, w: 300, h: 160 }
-        ];
+        const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
+        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
+        // --- INPUT HANDLING ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
             const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
             if (gameState === "studio") {
-                studioButtons.forEach(btn => {
-                    if (mouseX >= btn.x && mouseX <= btn.x + btn.w && mouseY >= btn.y && mouseY <= btn.y + btn.h) {
-                        if (btn.text === "HIRE") gameState = "hire";
-                        if (btn.text === "MUSIC") gameState = "music";
-                        if (btn.text === "VIDEO" && hireList[0].hired && musicTracks[0].owned) gameState = "video";
-                    }
-                });
+                if (mouseX >= 40 && mouseX <= 340 && mouseY >= 300 && mouseY <= 460) gameState = "hire";
+                if (mouseX >= 380 && mouseX <= 680 && mouseY >= 300 && mouseY <= 460) gameState = "music";
+                if (mouseX >= 210 && mouseX <= 510 && mouseY >= 500 && mouseY <= 660 && hireList[0].hired && musicTracks[0].owned) gameState = "video";
             } else if (gameState === "video") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
                 if (mouseX >= 185 && mouseX <= 535 && mouseY >= 300 && mouseY <= 460) gameState = "create_video_menu";
@@ -115,21 +102,27 @@
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
                 if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
                 if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
-                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA"; // Updated selection name
+                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
-                    gameState = "live";
-                    previewAudio.currentTime = 0;
-                    previewAudio.play();
+                    gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
             } else if (gameState === "live") {
                 if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-            } else if (gameState === "hire" || gameState === "music") {
+            } else if (gameState === "hire") {
+                if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
+                if (mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
+            } else if (gameState === "music") {
                 if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-                if (gameState === "hire" && mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
-                if (gameState === "music") {
-                    const track = musicTracks[0];
-                    if (mouseX >= 150 && mouseX <= 400 && mouseY >= 380 && mouseY <= 440) { if (previewAudio.paused) previewAudio.play(); else previewAudio.pause(); }
-                    else if (mouseX >= 450 && mouseX <= 650) { if (!track.owned && money >= 500) { money -= 500; track.owned = true; } }
+                
+                // RESTORED PREVIEW & BUY LOGIC
+                // Preview Area (Left side of track card)
+                if (mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
+                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } 
+                    else { previewAudio.pause(); }
+                }
+                // Buy Area (Right side of track card)
+                else if (mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450) {
+                    if (!musicTracks[0].owned && money >= 500) { money -= 500; musicTracks[0].owned = true; }
                 }
             }
         });
@@ -141,12 +134,12 @@
             if (gameState === "loading") drawFit(assets.cover);
             else if (gameState === "studio") {
                 drawFit(assets.studio); drawHeader("THE STUDIO");
-                studioButtons.forEach(btn => {
-                    ctx.save(); if (btn.text === "VIDEO" && !(hireList[0].hired && musicTracks[0].owned)) ctx.filter = "grayscale(1) brightness(0.5)";
-                    ctx.drawImage(assets.studioBtn, btn.x, btn.y, btn.w, btn.h); ctx.restore();
-                    ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
-                    ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2 + 10);
-                });
+                ctx.drawImage(assets.studioBtn, 40, 300, 300, 160);
+                ctx.drawImage(assets.studioBtn, 380, 300, 300, 160);
+                ctx.save(); if (!(hireList[0].hired && musicTracks[0].owned)) ctx.filter = "grayscale(1) brightness(0.5)";
+                ctx.drawImage(assets.studioBtn, 210, 500, 300, 160); ctx.restore();
+                ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
+                ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
             } else if (gameState === "live") {
                 drawFit(assets.liveBg);
                 const delta = clock.getDelta(); if (mixer) mixer.update(delta);
@@ -177,8 +170,40 @@
             requestAnimationFrame(update);
         }
 
+        // --- HELPERS ---
         function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
         function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
         function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
         function drawHireEntry(p, y) { ctx.drawImage(assets.hireBtn, 20, y, 680, 200); ctx.drawImage(p.img, 30, y+10, 180, 180); ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial"; ctx.fillText("NAME: " + p.name, 220, y+50); if (p.hired) { ctx.fillStyle = "#00FF00"; ctx.fillText("HIRED", 570, y+110); } else { ctx.fillStyle = "white"; ctx.fillText("HIRE FOR", 570, y+90); ctx.fillText("1000$", 570, y+135); } }
-        function drawMusicTrack(t) { ctx.save(); if (t.owned) ctx.filter = "hue-rotate(60deg) saturate(3)"; ctx.drawImage(assets.hireBtn, t.x, t.y, t.w, t.h); ctx.restore(); ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "
+        
+        function drawMusicTrack(t) { 
+            ctx.save(); 
+            if (t.owned) ctx.filter = "hue-rotate(60deg) saturate(3)"; 
+            ctx.drawImage(assets.hireBtn, 20, 250, 680, 200); 
+            ctx.restore(); 
+            
+            ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 20px Arial";
+            ctx.fillText("CODIGAMIA REMIX", 50, 310); 
+            
+            // Preview Text
+            ctx.fillStyle = previewAudio.paused ? "white" : "#00FFFF";
+            ctx.font = "bold 28px Arial";
+            ctx.fillText(previewAudio.paused ? "PREVIEW ▶" : "STOP ■", 180, 400);
+
+            ctx.textAlign = "center"; 
+            if (t.owned) { 
+                ctx.fillStyle = "white";
+                ctx.font = "bold 40px Arial"; 
+                ctx.fillText("OWNED", 570, 360); 
+            } else { 
+                ctx.fillStyle = "white";
+                ctx.font = "bold 30px Arial"; 
+                ctx.fillText("BUY FOR", 570, 335); 
+                ctx.fillText("500$", 570, 385); 
+            } 
+        }
+
+        update();
+    </script>
+</body>
+</html>
