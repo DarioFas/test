@@ -38,7 +38,7 @@
         assets.hireBtn.src = 'hire_bg.png';
         assets.hireBg.src = 'hire.jpg';
         assets.backBtn.src = 'back.jpg';
-        assets.mei.src = 'alguien.jpg';
+        assets.mei.src = 'alguien.jpg'; // Keep for UI/Hire portrait
         assets.videoBg.src = 'video.jpg';
         assets.musicBg.src = 'music.jpg';
         assets.liveBg.src = 'play.jpg';
@@ -53,26 +53,23 @@
         const threeCanvas = renderer.domElement;
 
         const textureLoader = new THREE.TextureLoader();
-        const charTexture = textureLoader.load('alguien.jpg');
+        // UPDATED: Using texture_pbr_v128.png
+        const charTexture = textureLoader.load('texture_pbr_v128.png');
 
         let mixer, clock = new THREE.Clock();
-        const loader = new THREE.GLTFLoader(); // Switch to GLTFLoader
+        const loader = new THREE.GLTFLoader(); 
         
         loader.load('Salsa.glb', (gltf) => {
             const object = gltf.scene;
-            console.log("Salsa.glb loaded!");
-            
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    // Re-apply the diffuse texture to the GLB mesh
                     child.material = new THREE.MeshBasicMaterial({ 
                         map: charTexture,
-                        skinning: true // Enable movement on the mesh skin
+                        skinning: true 
                     });
                 }
             });
 
-            // Center and Auto-Scale the model
             const box = new THREE.Box3().setFromObject(object);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
@@ -82,21 +79,16 @@
             const maxDim = Math.max(size.x, size.y, size.z);
             object.scale.setScalar(400 / maxDim);
 
-            // Handle Animations inside the GLB
             mixer = new THREE.AnimationMixer(object);
             if (gltf.animations && gltf.animations.length > 0) {
                 mixer.clipAction(gltf.animations[0]).play();
-                console.log("Playing animation:", gltf.animations[0].name);
             }
             scene.add(object);
-        }, undefined, (err) => {
-            console.error("Error loading Salsa.glb:", err);
         });
 
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
         const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
-        // --- INPUT HANDLING ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -176,7 +168,6 @@
             requestAnimationFrame(update);
         }
 
-        // --- HELPERS ---
         function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
         function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
         function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
