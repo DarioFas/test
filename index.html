@@ -53,7 +53,6 @@
         scene.add(sunLight);
 
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        // Positioned back and slightly up for a more natural eye-level view
         camera.position.set(0, 100, 1000); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -63,7 +62,7 @@
         const textureLoader = new THREE.TextureLoader();
         const charTexture = textureLoader.load('texture_pbr_v128.jpg');
 
-        let mixer, clock = new THREE.Clock();
+        // ANIMATION REMOVED: No mixer or clock needed for static model
         const loader = new THREE.GLTFLoader(); 
         
         loader.load('Salsa.glb', (gltf) => {
@@ -72,36 +71,28 @@
             object.traverse((child) => { 
                 if (child.isMesh) {
                     child.material = new THREE.MeshStandardMaterial({ 
-                        map: charTexture,
-                        skinning: true 
+                        map: charTexture
+                        // skinning: true is no longer needed for static meshes
                     });
                 }
             });
 
-            // --- BETTER CENTERING LOGIC ---
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
 
-            // Move the model so its center is exactly at (0,0,0)
             object.position.x = -center.x;
             object.position.y = -center.y;
             object.position.z = -center.z;
 
-            // Normalize size so it fits the frame perfectly
             const maxDim = Math.max(size.x, size.y, size.z);
             object.scale.setScalar(500 / maxDim);
 
-            // Point camera at the new local center of the model
             camera.lookAt(0, 0, 0);
-
-            mixer = new THREE.AnimationMixer(object);
-            if (gltf.animations && gltf.animations.length > 0) {
-                mixer.clipAction(gltf.animations[0]).play();
-            }
             scene.add(object);
         });
 
+        // --- UI & INPUT LOGIC ---
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
         const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
@@ -121,7 +112,7 @@
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
                 if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
                 if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
-                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
+                if (mouseY >= 680 && mouseY <= 780) selectedDance = "STATIC";
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
                     gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
@@ -156,7 +147,7 @@
                 ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
             } else if (gameState === "live") {
                 drawFit(assets.liveBg);
-                const delta = clock.getDelta(); if (mixer) mixer.update(delta);
+                // ANIMATION REMOVED: No mixer update call here
                 renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
                 ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
                 ctx.fillText("@" + selectedArtist, 50, 1000); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
