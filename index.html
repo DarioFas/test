@@ -45,52 +45,59 @@
 
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
+        
+        // ADDED LIGHTING: Required for PBR textures to be visible
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        sunLight.position.set(5, 10, 7);
+        scene.add(sunLight);
+
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        camera.position.set(0, 150, 600); 
+        camera.position.set(0, 150, 700); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
 
         const textureLoader = new THREE.TextureLoader();
-        const charTexture = textureLoader.load('alguien.jpg');
+        // UPDATED: Loading the new PBR texture
+        const charTexture = textureLoader.load('texture_pbr_v128.jpg');
 
         let mixer, clock = new THREE.Clock();
-        const loader = new THREE.GLTFLoader(); // Switch to GLTFLoader
+        const loader = new THREE.GLTFLoader(); 
         
         loader.load('Salsa.glb', (gltf) => {
             const object = gltf.scene;
-            console.log("Salsa.glb loaded!");
             
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    // Re-apply the diffuse texture to the GLB mesh
-                    child.material = new THREE.MeshBasicMaterial({ 
+                    // Apply texture and ensure it reacts to light (MeshStandardMaterial)
+                    child.material = new THREE.MeshStandardMaterial({ 
                         map: charTexture,
-                        skinning: true // Enable movement on the mesh skin
+                        skinning: true 
                     });
                 }
             });
 
-            // Center and Auto-Scale the model
+            // Center and Auto-Scale logic
             const box = new THREE.Box3().setFromObject(object);
-            const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
-            object.position.x += (object.position.x - center.x);
-            object.position.y += (object.position.y - center.y);
-            object.position.z += (object.position.z - center.z);
-            const maxDim = Math.max(size.x, size.y, size.z);
-            object.scale.setScalar(400 / maxDim);
+            const size = box.getSize(new THREE.Vector3());
 
-            // Handle Animations inside the GLB
+            // Reset position to center
+            object.position.x = -center.x;
+            object.position.y = -center.y;
+            object.position.z = -center.z;
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            object.scale.setScalar(450 / maxDim);
+
             mixer = new THREE.AnimationMixer(object);
             if (gltf.animations && gltf.animations.length > 0) {
                 mixer.clipAction(gltf.animations[0]).play();
-                console.log("Playing animation:", gltf.animations[0].name);
             }
             scene.add(object);
-        }, undefined, (err) => {
-            console.error("Error loading Salsa.glb:", err);
         });
 
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
@@ -176,7 +183,6 @@
             requestAnimationFrame(update);
         }
 
-        // --- HELPERS ---
         function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
         function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
         function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
