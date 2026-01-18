@@ -45,6 +45,14 @@
 
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
+        
+        // Added lights so internal materials are visible
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionLight(0xffffff, 0.8);
+        directionalLight.position.set(0, 10, 10);
+        scene.add(directionalLight);
+
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
         camera.position.set(0, 120, 900); 
 
@@ -52,36 +60,31 @@
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
 
-        const textureLoader = new THREE.TextureLoader();
-        const charTexture = textureLoader.load('texture_pbr_v128.png');
-
         let mixer, clock = new THREE.Clock();
         const loader = new THREE.GLTFLoader(); 
         
         loader.load('dance.glb', (gltf) => {
             const object = gltf.scene;
             
+            // --- REMOVED: forcing texture_pbr_v128.png ---
+            // Now we just ensure the mesh is prepared for animation
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    child.material = new THREE.MeshBasicMaterial({ 
-                        map: charTexture,
-                        skinning: true 
-                    });
+                    // We don't change child.material here anymore
+                    // We only make sure it's visible and reactive to light
+                    child.castShadow = true;
+                    child.receiveShadow = true;
                 }
             });
 
-            // --- CENTER MODEL ---
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             object.position.x = -center.x;
             object.position.y = -center.y;
             object.position.z = -center.z;
 
-            // --- UPDATED: 20% SCALING ---
-            // Sets the scale to exactly 0.2 of its original size
+            // 20% scale as requested
             object.scale.setScalar(0.2); 
-            
-            // Adjust position so it stays on the "ground"
             object.position.y -= 50;
 
             mixer = new THREE.AnimationMixer(object);
@@ -93,6 +96,7 @@
             console.error("Error loading dance.glb", error);
         });
 
+        // --- UI AND INPUT LOGIC ---
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
         const musicTracks = [{ text: "CODIGAMIA REMIX", owned: false }];
 
