@@ -54,18 +54,29 @@
         const threeCanvas = renderer.domElement;
 
         const textureLoader = new THREE.TextureLoader();
-        const charTexture = textureLoader.load('alguien.jpg');
+        // Force the texture to wrap correctly
+        const charTexture = textureLoader.load('alguien.jpg', (tex) => {
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            tex.flipY = false; // FBX often needs Y-flipping disabled for proper mapping
+        });
 
         let mixer, clock = new THREE.Clock();
         const loader = new THREE.FBXLoader();
         
         loader.load('Salsa.fbx', (object) => {
+            console.log("Salsa.fbx loaded! Animations found:", object.animations.length);
+            
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    child.material = new THREE.MeshBasicMaterial({ map: charTexture }); 
+                    // Apply a clean Basic Material with the loaded texture
+                    child.material = new THREE.MeshBasicMaterial({ 
+                        map: charTexture,
+                        skinning: true // Crucial for animation to work on a mesh
+                    });
                 }
             });
 
+            // Auto-resize and center
             const box = new THREE.Box3().setFromObject(object);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
@@ -75,9 +86,15 @@
             const maxDim = Math.max(size.x, size.y, size.z);
             object.scale.setScalar(400 / maxDim);
 
+            // Animation logic
             mixer = new THREE.AnimationMixer(object);
             if (object.animations && object.animations.length > 0) {
-                mixer.clipAction(object.animations[0]).play();
+                // Try to play the first clip found
+                const action = mixer.clipAction(object.animations[0]);
+                action.play();
+                console.log("Animation playing:", object.animations[0].name);
+            } else {
+                console.warn("No animations found in Salsa.fbx!");
             }
             scene.add(object);
         });
@@ -113,14 +130,9 @@
                 if (mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
             } else if (gameState === "music") {
                 if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-                
-                // RESTORED PREVIEW & BUY LOGIC
-                // Preview Area (Left side of track card)
                 if (mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
-                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } 
-                    else { previewAudio.pause(); }
+                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } else { previewAudio.pause(); }
                 }
-                // Buy Area (Right side of track card)
                 else if (mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450) {
                     if (!musicTracks[0].owned && money >= 500) { money -= 500; musicTracks[0].owned = true; }
                 }
@@ -181,26 +193,14 @@
             if (t.owned) ctx.filter = "hue-rotate(60deg) saturate(3)"; 
             ctx.drawImage(assets.hireBtn, 20, 250, 680, 200); 
             ctx.restore(); 
-            
             ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 20px Arial";
             ctx.fillText("CODIGAMIA REMIX", 50, 310); 
-            
-            // Preview Text
             ctx.fillStyle = previewAudio.paused ? "white" : "#00FFFF";
             ctx.font = "bold 28px Arial";
             ctx.fillText(previewAudio.paused ? "PREVIEW ▶" : "STOP ■", 180, 400);
-
             ctx.textAlign = "center"; 
-            if (t.owned) { 
-                ctx.fillStyle = "white";
-                ctx.font = "bold 40px Arial"; 
-                ctx.fillText("OWNED", 570, 360); 
-            } else { 
-                ctx.fillStyle = "white";
-                ctx.font = "bold 30px Arial"; 
-                ctx.fillText("BUY FOR", 570, 335); 
-                ctx.fillText("500$", 570, 385); 
-            } 
+            if (t.owned) { ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.fillText("OWNED", 570, 360); } 
+            else { ctx.fillStyle = "white"; ctx.font = "bold 30px Arial"; ctx.fillText("BUY FOR", 570, 335); ctx.fillText("500$", 570, 385); } 
         }
 
         update();
