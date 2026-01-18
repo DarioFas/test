@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>K-Pop Stars: The Game (2D Version)</title>
+    <title>K-Pop Stars: The Game</title>
     <style>
-        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #111; overflow: hidden; font-family: 'Arial', sans-serif; }
-        #container { position: relative; max-height: 98vh; aspect-ratio: 9 / 16; width: auto; height: 100%; }
-        canvas { display: block; width: 100%; height: 100%; border: 2px solid #444; background: #000; cursor: pointer; }
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #111; overflow: hidden; }
+        #container { position: relative; max-height: 98vh; aspect-ratio: 9 / 16; }
+        canvas { display: block; width: 100%; height: 100%; border: 2px solid #444; cursor: pointer; }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
     <div id="container">
@@ -20,35 +22,79 @@
         canvas.width = 720;
         canvas.height = 1280;
 
-        // --- GAME DATA ---
         let money = 2000;
-        let gameState = "studio"; // Skips loading for immediate testing
+        let gameState = "loading";
         let selectedArtist = null, selectedMusic = null, selectedDance = null;
-        let hiredMei = false;
-        let ownedMusic = false;
-
         const previewAudio = new Audio('music.mp3');
 
-        // --- IMAGE ASSETS ---
-        const images = {};
-        const sources = {
-            cover: 'cover.jpg',
-            studio: 'main.jpg',
-            studioBtn: 'button_01.png',
-            hireBtn: 'hire_bg.png',
-            hireBg: 'hire.jpg',
-            backBtn: 'back.jpg',
-            mei: 'alguien.jpg',
-            videoBg: 'video.jpg',
-            musicBg: 'music.jpg',
-            liveBg: 'play.jpg'
+        const assets = {
+            cover: new Image(), studio: new Image(), studioBtn: new Image(),
+            hireBtn: new Image(), hireBg: new Image(), backBtn: new Image(), 
+            mei: new Image(), videoBg: new Image(), musicBg: new Image(), liveBg: new Image()
         };
+        assets.cover.src = 'cover.jpg';
+        assets.studio.src = 'main.jpg';
+        assets.studioBtn.src = 'button_01.png';
+        assets.hireBtn.src = 'hire_bg.png';
+        assets.hireBg.src = 'hire.jpg';
+        assets.backBtn.src = 'back.jpg';
+        assets.mei.src = 'alguien.jpg';
+        assets.videoBg.src = 'video.jpg';
+        assets.musicBg.src = 'music.jpg';
+        assets.liveBg.src = 'play.jpg';
 
-        // Load images safely
-        for (let key in sources) {
-            images[key] = new Image();
-            images[key].src = sources[key];
-        }
+        // --- 3D ENGINE SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
+        camera.position.set(0, 150, 600); 
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(720, 1280);
+        const threeCanvas = renderer.domElement;
+
+        const textureLoader = new THREE.TextureLoader();
+        const charTexture = textureLoader.load('alguien.jpg');
+
+        let mixer, clock = new THREE.Clock();
+        const loader = new THREE.GLTFLoader(); // Switch to GLTFLoader
+        
+        loader.load('Salsa.glb', (gltf) => {
+            const object = gltf.scene;
+            console.log("Salsa.glb loaded!");
+            
+            object.traverse((child) => { 
+                if (child.isMesh) {
+                    // Re-apply the diffuse texture to the GLB mesh
+                    child.material = new THREE.MeshBasicMaterial({ 
+                        map: charTexture,
+                        skinning: true // Enable movement on the mesh skin
+                    });
+                }
+            });
+
+            // Center and Auto-Scale the model
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            object.position.x += (object.position.x - center.x);
+            object.position.y += (object.position.y - center.y);
+            object.position.z += (object.position.z - center.z);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            object.scale.setScalar(400 / maxDim);
+
+            // Handle Animations inside the GLB
+            mixer = new THREE.AnimationMixer(object);
+            if (gltf.animations && gltf.animations.length > 0) {
+                mixer.clipAction(gltf.animations[0]).play();
+                console.log("Playing animation:", gltf.animations[0].name);
+            }
+            scene.add(object);
+        }, undefined, (err) => {
+            console.error("Error loading Salsa.glb:", err);
+        });
+
+        const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
+        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
         // --- INPUT HANDLING ---
         canvas.addEventListener('mousedown', (e) => {
@@ -59,121 +105,87 @@
             if (gameState === "studio") {
                 if (mouseX >= 40 && mouseX <= 340 && mouseY >= 300 && mouseY <= 460) gameState = "hire";
                 if (mouseX >= 380 && mouseX <= 680 && mouseY >= 300 && mouseY <= 460) gameState = "music";
-                if (mouseX >= 210 && mouseX <= 510 && mouseY >= 500 && mouseY <= 660 && hiredMei && ownedMusic) gameState = "video";
-            } 
-            else if (gameState === "hire") {
-                if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
-                if (mouseY >= 250 && mouseY <= 450 && !hiredMei && money >= 1000) { money -= 1000; hiredMei = true; }
-            } 
-            else if (gameState === "music") {
-                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-                if (mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
-                    if (previewAudio.paused) previewAudio.play(); else previewAudio.pause();
-                } else if (mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450 && !ownedMusic && money >= 500) {
-                    money -= 500; ownedMusic = true;
-                }
-            } 
-            else if (gameState === "video") {
+                if (mouseX >= 210 && mouseX <= 510 && mouseY >= 500 && mouseY <= 660 && hireList[0].hired && musicTracks[0].owned) gameState = "video";
+            } else if (gameState === "video") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
                 if (mouseX >= 185 && mouseX <= 535 && mouseY >= 300 && mouseY <= 460) gameState = "create_video_menu";
-            } 
-            else if (gameState === "create_video_menu") {
+            } else if (gameState === "create_video_menu") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
-                if (mouseY >= 280 && mouseY <= 380) selectedArtist = "MEI WAN";
-                if (mouseY >= 480 && mouseY <= 580) selectedMusic = "CODIGAMIA REMIX";
-                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA DANCE";
+                if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
+                if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
+                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
                     gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
-            } 
-            else if (gameState === "live") {
+            } else if (gameState === "live") {
                 if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
+            } else if (gameState === "hire") {
+                if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
+                if (mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
+            } else if (gameState === "music") {
+                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
+                if (mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
+                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } else { previewAudio.pause(); }
+                }
+                else if (mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450) {
+                    if (!musicTracks[0].owned && money >= 500) { money -= 500; musicTracks[0].owned = true; }
+                }
             }
         });
 
-        // --- DRAWING LOOP ---
+        setTimeout(() => { gameState = "studio"; }, 3000);
+
         function update() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (gameState === "studio") {
-                drawFit(images.studio);
-                drawHeader("THE STUDIO");
-                ctx.drawImage(images.studioBtn, 40, 300, 300, 160);
-                ctx.drawImage(images.studioBtn, 380, 300, 300, 160);
-                
-                ctx.save(); 
-                if (!(hiredMei && ownedMusic)) ctx.filter = "grayscale(1) brightness(0.5)";
-                ctx.drawImage(images.studioBtn, 210, 500, 300, 160); 
-                ctx.restore();
-
+            if (gameState === "loading") drawFit(assets.cover);
+            else if (gameState === "studio") {
+                drawFit(assets.studio); drawHeader("THE STUDIO");
+                ctx.drawImage(assets.studioBtn, 40, 300, 300, 160);
+                ctx.drawImage(assets.studioBtn, 380, 300, 300, 160);
+                ctx.save(); if (!(hireList[0].hired && musicTracks[0].owned)) ctx.filter = "grayscale(1) brightness(0.5)";
+                ctx.drawImage(assets.studioBtn, 210, 500, 300, 160); ctx.restore();
                 ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
                 ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
-            } 
-            else if (gameState === "hire") {
-                drawFit(images.hireBg); drawHeader("HIRE TALENT");
-                ctx.drawImage(images.hireBtn, 20, 250, 680, 200);
-                ctx.drawImage(images.mei, 30, 260, 180, 180);
-                ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial";
-                ctx.fillText("NAME: MEI WAN", 220, 300);
-                if (hiredMei) { ctx.fillStyle = "#00FF00"; ctx.fillText("HIRED", 570, 360); }
-                else { ctx.fillStyle = "white"; ctx.fillText("HIRE: 1000$", 540, 360); }
-                ctx.drawImage(images.backBtn, 560, 1100, 120, 120);
-            } 
-            else if (gameState === "music") {
-                drawFit(images.musicBg); drawHeader("MUSIC STUDIO");
-                ctx.save(); if (ownedMusic) ctx.filter = "hue-rotate(90deg)";
-                ctx.drawImage(images.hireBtn, 20, 250, 680, 200); ctx.restore();
-                ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial";
-                ctx.fillText("CODIGAMIA REMIX", 50, 310);
-                ctx.fillText(previewAudio.paused ? "PREVIEW ▶" : "STOP ■", 180, 400);
-                if (ownedMusic) { ctx.fillStyle = "white"; ctx.fillText("OWNED", 570, 360); }
-                else { ctx.fillStyle = "white"; ctx.fillText("BUY: 500$", 570, 360); }
-                ctx.drawImage(images.backBtn, 560, 1100, 120, 120);
-            }
-            else if (gameState === "video" || gameState === "create_video_menu") {
-                drawFit(images.videoBg); drawHeader(gameState === "video" ? "VIDEO PRODUCTION" : "NEW RELEASE");
-                if (gameState === "video") {
-                    ctx.drawImage(images.studioBtn, 185, 300, 350, 160);
-                    ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("CREATE VIDEO", 360, 390);
-                } else {
-                    ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
-                    ctx.fillText("Artist: " + (selectedArtist || "SELECT"), 100, 350);
-                    ctx.fillText("Music: " + (selectedMusic || "SELECT"), 100, 550);
-                    ctx.fillText("Dance: " + (selectedDance || "SELECT"), 100, 750);
-                    ctx.drawImage(images.studioBtn, 185, 920, 350, 160);
-                    ctx.textAlign = "center"; ctx.fillText("UPLOAD", 360, 1010);
-                }
-                ctx.drawImage(images.backBtn, 560, 1100, 120, 120);
-            }
-            else if (gameState === "live") {
-                drawFit(images.liveBg);
-                // Instead of 3D, we show the character portrait dancing (bouncing)
-                let bounce = Math.sin(Date.now() / 200) * 20;
-                ctx.drawImage(images.mei, 160, 300 + bounce, 400, 400);
-                
+            } else if (gameState === "live") {
+                drawFit(assets.liveBg);
+                const delta = clock.getDelta(); if (mixer) mixer.update(delta);
+                renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
                 ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
-                ctx.fillText("@" + selectedArtist, 50, 1000);
-                ctx.drawImage(images.backBtn, 560, 1100, 120, 120);
+                ctx.fillText("@" + selectedArtist, 50, 1000); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "hire") {
+                drawFit(assets.hireBg); drawHeader("HIRE TALENT"); drawHireEntry(hireList[0], 250);
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "music") {
+                drawFit(assets.musicBg); drawHeader("MUSIC STUDIO"); drawMusicTrack(musicTracks[0]);
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "video") {
+                drawFit(assets.videoBg); drawHeader("VIDEO PRODUCTION");
+                ctx.drawImage(assets.studioBtn, 185, 300, 350, 160);
+                ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
+                ctx.fillText("CREATE VIDEO", 360, 390); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "create_video_menu") {
+                drawFit(assets.videoBg); drawHeader("NEW RELEASE");
+                ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 35px Arial";
+                ctx.fillText("Artist:", 100, 260); drawSelectionBox(100, 280, 520, 100, selectedArtist || "SELECT");
+                ctx.fillText("Music:", 100, 460); drawSelectionBox(100, 480, 520, 100, selectedMusic || "SELECT");
+                ctx.fillText("Dance moves:", 100, 660); drawSelectionBox(100, 680, 520, 100, selectedDance || "SELECT");
+                ctx.drawImage(assets.studioBtn, 185, 920, 350, 160);
+                ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("UPLOAD", 360, 1010);
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
             }
-
             requestAnimationFrame(update);
         }
 
         // --- HELPERS ---
-        function drawFit(img) {
-            if (!img.complete || img.naturalWidth === 0) return;
-            const ratio = img.width/img.height, cRatio = canvas.width/canvas.height;
-            let rw, rh, ox, oy;
-            if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; }
-            else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; }
-            ctx.drawImage(img, ox, oy, rw, rh);
-        }
-
-        function drawHeader(title) {
-            ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 40, canvas.width, 180);
-            ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center";
-            ctx.fillText(title, canvas.width/2, 100);
-            ctx.font = "24px Courier"; ctx.fillText("MONEY: $" + money, canvas.width/2, 160);
+        function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
+        function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
+        function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
+        function drawHireEntry(p, y) { ctx.drawImage(assets.hireBtn, 20, y, 680, 200); ctx.drawImage(p.img, 30, y+10, 180, 180); ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial"; ctx.fillText("NAME: " + p.name, 220, y+50); if (p.hired) { ctx.fillStyle = "#00FF00"; ctx.fillText("HIRED", 570, y+110); } else { ctx.fillStyle = "white"; ctx.fillText("HIRE FOR", 570, y+90); ctx.fillText("1000$", 570, y+135); } }
+        function drawMusicTrack(t) { 
+            ctx.save(); if (t.owned) ctx.filter = "hue-rotate(60deg) saturate(3)"; ctx.drawImage(assets.hireBtn, 20, 250, 680, 200); ctx.restore(); 
+            ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 20px Arial"; ctx.fillText("CODIGAMIA REMIX", 50, 310); 
+            ctx.fillStyle = previewAudio.paused ? "white" : "#00FFFF"; ctx.font = "bold 28px Arial"; ctx.fillText(previewAudio.paused ? "PREVIEW ▶" : "STOP ■", 180, 400);
+            ctx.textAlign = "center"; if (t.owned) { ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.fillText("OWNED", 570, 360); } else { ctx.fillStyle = "white"; ctx.font = "bold 30px Arial"; ctx.fillText("BUY FOR", 570, 335); ctx.fillText("500$", 570, 385); } 
         }
 
         update();
