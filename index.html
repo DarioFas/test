@@ -46,57 +46,57 @@
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        
-        // Far camera position
-        camera.position.set(0, 120, 900); 
+        camera.position.set(0, 150, 600); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
 
         const textureLoader = new THREE.TextureLoader();
-        const charTexture = textureLoader.load('texture_pbr_v128.png');
+        const charTexture = textureLoader.load('alguien.jpg');
 
         let mixer, clock = new THREE.Clock();
-        const loader = new THREE.GLTFLoader(); 
+        const loader = new THREE.GLTFLoader(); // Switch to GLTFLoader
         
-        // --- UPDATED: Loading dance.glb instead of Salsa.glb ---
-        loader.load('dance.glb', (gltf) => {
+        loader.load('Salsa.glb', (gltf) => {
             const object = gltf.scene;
+            console.log("Salsa.glb loaded!");
             
             object.traverse((child) => { 
                 if (child.isMesh) {
+                    // Re-apply the diffuse texture to the GLB mesh
                     child.material = new THREE.MeshBasicMaterial({ 
                         map: charTexture,
-                        skinning: true 
+                        skinning: true // Enable movement on the mesh skin
                     });
                 }
             });
 
+            // Center and Auto-Scale the model
             const box = new THREE.Box3().setFromObject(object);
-            const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
-
-            object.position.x = -center.x;
-            object.position.y = -center.y;
-            object.position.z = -center.z;
-
+            const center = box.getCenter(new THREE.Vector3());
+            object.position.x += (object.position.x - center.x);
+            object.position.y += (object.position.y - center.y);
+            object.position.z += (object.position.z - center.z);
             const maxDim = Math.max(size.x, size.y, size.z);
-            object.scale.setScalar(420 / maxDim); 
-            object.position.y -= 80;
+            object.scale.setScalar(400 / maxDim);
 
+            // Handle Animations inside the GLB
             mixer = new THREE.AnimationMixer(object);
             if (gltf.animations && gltf.animations.length > 0) {
                 mixer.clipAction(gltf.animations[0]).play();
+                console.log("Playing animation:", gltf.animations[0].name);
             }
             scene.add(object);
-        }, undefined, (error) => {
-            console.error("Error loading dance.glb. Check file name and location.", error);
+        }, undefined, (err) => {
+            console.error("Error loading Salsa.glb:", err);
         });
 
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
-        const musicTracks = [{ text: "CODIGAMIA REMIX", owned: false }];
+        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
+        // --- INPUT HANDLING ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -112,8 +112,8 @@
             } else if (gameState === "create_video_menu") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
                 if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
-                if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = "REMIX";
-                if (mouseY >= 680 && mouseY <= 780) selectedDance = "DANCE";
+                if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
+                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
                     gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
@@ -176,6 +176,7 @@
             requestAnimationFrame(update);
         }
 
+        // --- HELPERS ---
         function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
         function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
         function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
