@@ -2,14 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>K-Pop Stars: The Game</title>
+    <title>K-Pop Stars: Music Empire</title>
+    <link rel="icon" href="data:;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #111; overflow: hidden; }
         #container { position: relative; max-height: 98vh; aspect-ratio: 9 / 16; }
         canvas { display: block; width: 100%; height: 100%; border: 2px solid #444; cursor: pointer; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
 </head>
 <body>
     <div id="container">
@@ -24,9 +26,14 @@
 
         let money = 2000;
         let gameState = "loading";
+        let isRecording = false, isFinished = false;
         let selectedArtist = null, selectedMusic = null, selectedDance = null;
-        const previewAudio = new Audio('music.mp3');
+        
+        let createdVideos = [];
+        let floatingTexts = [];
+        let lastIncomeTime = Date.now();
 
+        const previewAudio = new Audio('music.mp3');
         const assets = {
             cover: new Image(), studio: new Image(), studioBtn: new Image(),
             hireBtn: new Image(), hireBg: new Image(), backBtn: new Image(), 
@@ -43,66 +50,42 @@
         assets.musicBg.src = 'music.jpg';
         assets.liveBg.src = 'play.jpg';
 
-        // --- 3D ENGINE SETUP ---
-        const scene = new THREE.Scene();
-        
-        // Lights are necessary for the internal GLB materials to show correctly
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
-        scene.add(ambientLight);
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        sunLight.position.set(5, 10, 7);
-        scene.add(sunLight);
+        const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
+        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
-        const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        camera.position.set(0, 100, 1000); 
+        // --- 3D ENGINE (CAMERA SHIFTED LEFT) ---
+        const scene = new THREE.Scene();
+        let camera = new THREE.PerspectiveCamera(50, 720 / 1280, 1, 10000);
+        
+        // MOVED LEFT: X set to -800
+        camera.position.set(-500, 500, 2200); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
+        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+        const textureLoader = new THREE.TextureLoader();
+        const charTexture = textureLoader.load('texture_pbr_v128.png');
 
-        let mixer, clock = new THREE.Clock();
-        const loader = new THREE.GLTFLoader(); 
-        
-        loader.load('Salsa.glb', (gltf) => {
-            const object = gltf.scene;
-            
-            // We no longer override child.material with textureLoader
-            // This preserves the internal textures of Salsa.glb
-            object.traverse((child) => { 
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-
-            // Centering and Scaling
+        let mixer, salsaAction, clock = new THREE.Clock();
+        const fbxLoader = new THREE.FBXLoader(); 
+        fbxLoader.load('Salsa.fbx', (object) => {
+            object.traverse((child) => { if (child.isMesh) { child.material = new THREE.MeshBasicMaterial({ map: charTexture, skinning: true }); child.frustumCulled = false; } });
             const box = new THREE.Box3().setFromObject(object);
-            const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
-
-            object.position.x = -center.x;
-            object.position.y = -center.y;
-            object.position.z = -center.z;
-
-            const maxDim = Math.max(size.x, size.y, size.z);
-            object.scale.setScalar(550 / maxDim);
-
-            // Re-enabling the Animation Mixer for movement
-            mixer = new THREE.AnimationMixer(object);
-            if (gltf.animations && gltf.animations.length > 0) {
-                mixer.clipAction(gltf.animations[0]).play();
-            }
+            const center = box.getCenter(new THREE.Vector3());
             
-            camera.lookAt(0, 0, 0);
+            object.position.set(-center.x, -box.min.y, -center.z);
+            object.scale.setScalar(950 / Math.max(size.x, size.y, size.z)); 
+            
+            mixer = new THREE.AnimationMixer(object);
+            if (object.animations.length > 0) salsaAction = mixer.clipAction(object.animations[0]);
             scene.add(object);
-        }, undefined, (err) => {
-            console.error("Error loading Salsa.glb:", err);
+            
+            camera.lookAt(-100, 600, 0); // Keep focus on character
         });
 
-        // --- UI & INPUT LOGIC ---
-        const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
-        const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
-
+        // --- INPUTS ---
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
             const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -115,34 +98,54 @@
             } else if (gameState === "video") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
                 if (mouseX >= 185 && mouseX <= 535 && mouseY >= 300 && mouseY <= 460) gameState = "create_video_menu";
+                if (mouseX >= 185 && mouseX <= 535 && mouseY >= 500 && mouseY <= 660) gameState = "gallery";
+            } else if (gameState === "gallery") {
+                if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
             } else if (gameState === "create_video_menu") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
                 if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
                 if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
                 if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
-                if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
-                    gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
-                }
+                if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) startRecording();
             } else if (gameState === "live") {
-                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-            } else if (gameState === "hire") {
-                if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
-                if (mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
-            } else if (gameState === "music") {
-                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
-                if (mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
-                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } else { previewAudio.pause(); }
+                if (isFinished && mouseX >= 560 && mouseY >= 1100) { 
+                    createdVideos.push({ name: `${selectedArtist} - ${selectedMusic}`, totalEarned: 0, views: 0 });
+                    gameState = "video"; isFinished = false; 
                 }
-                else if (mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450) {
+            } else if (gameState === "hire" || gameState === "music") {
+                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
+                if (gameState === "hire" && mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { 
+                    money -= 1000; hireList[0].hired = true; 
+                }
+                if (gameState === "music" && mouseX >= 150 && mouseX <= 400 && mouseY >= 350 && mouseY <= 440) {
+                    if (previewAudio.paused) { previewAudio.currentTime = 0; previewAudio.play(); } else { previewAudio.pause(); }
+                } else if (gameState === "music" && mouseX >= 450 && mouseX <= 680 && mouseY >= 250 && mouseY <= 450) {
                     if (!musicTracks[0].owned && money >= 500) { money -= 500; musicTracks[0].owned = true; }
                 }
             }
         });
 
+        function startRecording() {
+            gameState = "live"; isRecording = true; isFinished = false;
+            previewAudio.currentTime = 0; previewAudio.play();
+            if (salsaAction) salsaAction.reset().play();
+        }
+
+        previewAudio.onended = () => { isRecording = false; isFinished = true; if (salsaAction) salsaAction.stop(); };
+
         setTimeout(() => { gameState = "studio"; }, 3000);
 
         function update() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (Date.now() - lastIncomeTime > 2000 && createdVideos.length > 0) {
+                let totalIncome = createdVideos.length * 5;
+                money += totalIncome;
+                createdVideos.forEach(v => { v.totalEarned += 5; v.views += Math.floor(Math.random() * 50) + 100; });
+                floatingTexts.push({ x: 500, y: 160, opacity: 1, text: `+${totalIncome}` });
+                lastIncomeTime = Date.now();
+            }
+
             if (gameState === "loading") drawFit(assets.cover);
             else if (gameState === "studio") {
                 drawFit(assets.studio); drawHeader("THE STUDIO");
@@ -152,23 +155,38 @@
                 ctx.drawImage(assets.studioBtn, 210, 500, 300, 160); ctx.restore();
                 ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
                 ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
-            } else if (gameState === "live") {
-                drawFit(assets.liveBg);
-                const delta = clock.getDelta(); if (mixer) mixer.update(delta);
-                renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
-                ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
-                ctx.fillText("@" + selectedArtist, 50, 1000); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
-            } else if (gameState === "hire") {
-                drawFit(assets.hireBg); drawHeader("HIRE TALENT"); drawHireEntry(hireList[0], 250);
-                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
-            } else if (gameState === "music") {
-                drawFit(assets.musicBg); drawHeader("MUSIC STUDIO"); drawMusicTrack(musicTracks[0]);
-                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
             } else if (gameState === "video") {
                 drawFit(assets.videoBg); drawHeader("VIDEO PRODUCTION");
                 ctx.drawImage(assets.studioBtn, 185, 300, 350, 160);
+                ctx.drawImage(assets.studioBtn, 185, 500, 350, 160);
                 ctx.fillStyle = "white"; ctx.font = "bold 35px Arial"; ctx.textAlign = "center";
-                ctx.fillText("CREATE VIDEO", 360, 390); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+                ctx.fillText("CREATE NEW", 360, 390); ctx.fillText("GALLERY", 360, 590);
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "gallery") {
+                drawFit(assets.videoBg); drawHeader("RELEASED VIDEOS");
+                createdVideos.forEach((v, i) => {
+                    ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(50, 230 + (i * 130), 620, 110);
+                    ctx.fillStyle = "white"; ctx.font = "bold 24px Arial"; ctx.textAlign = "left";
+                    ctx.fillText(v.name, 70, 265 + (i * 130));
+                    ctx.font = "20px Arial"; ctx.fillText(`VIEWS: ${v.views.toLocaleString()}`, 70, 295 + (i * 130));
+                    ctx.fillStyle = "#00FF00"; ctx.fillText(`EARNED: $${v.totalEarned}`, 70, 325 + (i * 130));
+                });
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+            } else if (gameState === "live") {
+                drawFit(assets.liveBg);
+                const delta = clock.getDelta(); if (mixer && isRecording) mixer.update(delta);
+                renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
+                if (isRecording) {
+                    ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + Math.sin(Date.now() / 200) * 0.5})`;
+                    ctx.font = "bold 50px Arial"; ctx.textAlign = "center"; ctx.fillText("● RECORDING", canvas.width / 2, 100);
+                }
+                if (isFinished) {
+                    ctx.fillStyle = "white"; ctx.font = "bold 80px Arial"; ctx.textAlign = "center";
+                    ctx.fillText("UPLOADED", canvas.width / 2, canvas.height / 2);
+                    ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+                }
+                ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
+                ctx.fillText("@" + (selectedArtist || "ARTIST"), 50, 1000);
             } else if (gameState === "create_video_menu") {
                 drawFit(assets.videoBg); drawHeader("NEW RELEASE");
                 ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 35px Arial";
@@ -178,17 +196,41 @@
                 ctx.drawImage(assets.studioBtn, 185, 920, 350, 160);
                 ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("UPLOAD", 360, 1010);
                 ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
-            }
+            } else if (gameState === "hire") { drawFit(assets.hireBg); drawHeader("HIRE TALENT"); drawHireEntry(hireList[0], 250); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120); }
+            else if (gameState === "music") { drawFit(assets.musicBg); drawHeader("MUSIC STUDIO"); drawMusicTrack(musicTracks[0]); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120); }
+
+            floatingTexts.forEach((ft, i) => {
+                ctx.fillStyle = `rgba(255, 0, 0, ${ft.opacity})`; ctx.font = "bold 40px Arial";
+                ctx.fillText(ft.text, ft.x, ft.y); ft.y -= 2; ft.opacity -= 0.02;
+                if (ft.opacity <= 0) floatingTexts.splice(i, 1);
+            });
+
             requestAnimationFrame(update);
         }
 
         function drawFit(img) { if (!img.complete) return; const ratio = img.width/img.height, cRatio = canvas.width/canvas.height; let rw, rh, ox, oy; if (ratio > cRatio) { rw = canvas.width; rh = canvas.width/ratio; ox = 0; oy = (canvas.height-rh)/2; } else { rh = canvas.height; rw = canvas.height*ratio; ox = (canvas.width-rw)/2; oy = 0; } ctx.drawImage(img, ox, oy, rw, rh); }
         function drawHeader(title) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, 40, canvas.width, 180); ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.textAlign = "center"; ctx.fillText(title, canvas.width/2, 100); ctx.font = "30px Courier New"; ctx.fillText("MONEY: " + money.toString().padStart(10, '0'), canvas.width/2, 160); }
         function drawSelectionBox(x, y, w, h, text) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x+w/2, y+h/2+10); }
-        function drawHireEntry(p, y) { ctx.drawImage(assets.hireBtn, 20, y, 680, 200); ctx.drawImage(p.img, 30, y+10, 180, 180); ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial"; ctx.fillText("NAME: " + p.name, 220, y+50); if (p.hired) { ctx.fillStyle = "#00FF00"; ctx.fillText("HIRED", 570, y+110); } else { ctx.fillStyle = "white"; ctx.fillText("HIRE FOR", 570, y+90); ctx.fillText("1000$", 570, y+135); } }
+        
+        function drawHireEntry(p, y) { 
+            ctx.save();
+            if (p.hired) ctx.filter = "hue-rotate(100deg) brightness(1.2) saturate(2)"; 
+            ctx.drawImage(assets.hireBtn, 20, y, 680, 200); 
+            ctx.restore();
+
+            ctx.drawImage(p.img, 30, y+10, 180, 180); 
+            ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 24px Arial"; 
+            ctx.fillText("NAME: " + p.name, 220, y+50); 
+            if (p.hired) { 
+                ctx.fillStyle = "#00FF00"; ctx.fillText("HIRED", 570, y+110); 
+            } else { 
+                ctx.fillStyle = "white"; ctx.fillText("HIRE FOR", 570, y+90); ctx.fillText("1000$", 570, y+135); 
+            } 
+        }
+
         function drawMusicTrack(t) { 
             ctx.save(); if (t.owned) ctx.filter = "hue-rotate(60deg) saturate(3)"; ctx.drawImage(assets.hireBtn, 20, 250, 680, 200); ctx.restore(); 
-            ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 20px Arial"; ctx.fillText("CODIGAMIA REMIX", 50, 310); 
+            ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 20px Arial"; ctx.fillText(t.text, 50, 310); 
             ctx.fillStyle = previewAudio.paused ? "white" : "#00FFFF"; ctx.font = "bold 28px Arial"; ctx.fillText(previewAudio.paused ? "PREVIEW ▶" : "STOP ■", 180, 400);
             ctx.textAlign = "center"; if (t.owned) { ctx.fillStyle = "white"; ctx.font = "bold 40px Arial"; ctx.fillText("OWNED", 570, 360); } else { ctx.fillStyle = "white"; ctx.font = "bold 30px Arial"; ctx.fillText("BUY FOR", 570, 335); ctx.fillText("500$", 570, 385); } 
         }
