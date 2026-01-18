@@ -25,6 +25,12 @@
         let money = 2000;
         let gameState = "loading";
         let selectedArtist = null, selectedMusic = null, selectedDance = null;
+        
+        // ZOOM SYSTEM VARIABLES
+        let zoomLevel = 500; 
+        const minZoom = 200;
+        const maxZoom = 1000;
+
         const previewAudio = new Audio('music.mp3');
 
         const assets = {
@@ -46,7 +52,7 @@
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, 720 / 1280, 1, 10000);
-        camera.position.set(0, 100, 500); // Neutral starting position
+        camera.position.set(0, 100, zoomLevel); 
 
         const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
         renderer.setSize(720, 1280);
@@ -60,44 +66,31 @@
         
         loader.load('Salsa.glb', (gltf) => {
             const object = gltf.scene;
-            
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    child.material = new THREE.MeshBasicMaterial({ 
-                        map: charTexture,
-                        skinning: true 
-                    });
+                    child.material = new THREE.MeshBasicMaterial({ map: charTexture, skinning: true });
                 }
             });
 
-            // --- THE AUTO-CENTERING & SCALING LOGIC ---
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
 
-            // 1. Move the model so its center is at (0, 0, 0)
             object.position.x = -center.x;
             object.position.y = -center.y;
             object.position.z = -center.z;
 
-            // 2. Adjust scale based on the largest dimension to fit the screen
             const maxDim = Math.max(size.x, size.y, size.z);
-            const targetHeight = 400; // Standardize height
-            const scale = targetHeight / maxDim;
-            object.scale.setScalar(scale);
-
-            // 3. Optional: Lift the model so feet are roughly at the bottom
-            object.position.y -= (size.y * scale) / 4; 
+            object.scale.setScalar(400 / maxDim);
+            object.position.y -= 100; 
 
             mixer = new THREE.AnimationMixer(object);
             if (gltf.animations && gltf.animations.length > 0) {
                 mixer.clipAction(gltf.animations[0]).play();
             }
             scene.add(object);
-            console.log("Model Centered and Rescaled");
         });
 
-        // --- GAME LOGIC ---
         const hireList = [{ id: 'mei', name: "MEI WAN", price: 1000, hired: false, img: assets.mei }];
         const musicTracks = [{ text: "CODIGAMIA REMIX", shortName: "CODIGAMIA REMIX", price: 500, owned: false }];
 
@@ -110,6 +103,18 @@
                 if (mouseX >= 40 && mouseX <= 340 && mouseY >= 300 && mouseY <= 460) gameState = "hire";
                 if (mouseX >= 380 && mouseX <= 680 && mouseY >= 300 && mouseY <= 460) gameState = "music";
                 if (mouseX >= 210 && mouseX <= 510 && mouseY >= 500 && mouseY <= 660 && hireList[0].hired && musicTracks[0].owned) gameState = "video";
+            } else if (gameState === "live") {
+                // Back Button
+                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
+                
+                // Zoom Plus Button
+                if (mouseX >= 620 && mouseX <= 680 && mouseY >= 200 && mouseY <= 260) {
+                    zoomLevel = Math.max(minZoom, zoomLevel - 50);
+                }
+                // Zoom Minus Button
+                if (mouseX >= 620 && mouseX <= 680 && mouseY >= 280 && mouseY <= 340) {
+                    zoomLevel = Math.min(maxZoom, zoomLevel + 50);
+                }
             } else if (gameState === "video") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
                 if (mouseX >= 185 && mouseX <= 535 && mouseY >= 300 && mouseY <= 460) gameState = "create_video_menu";
@@ -121,8 +126,6 @@
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
                     gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
-            } else if (gameState === "live") {
-                if (mouseX >= 560 && mouseY >= 1100) { gameState = "studio"; previewAudio.pause(); }
             } else if (gameState === "hire") {
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "studio";
                 if (mouseY >= 250 && mouseY <= 450 && !hireList[0].hired && money >= 1000) { money -= 1000; hireList[0].hired = true; }
@@ -152,10 +155,21 @@
                 ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
             } else if (gameState === "live") {
                 drawFit(assets.liveBg);
+                
+                // Update camera position based on zoomLevel
+                camera.position.z = zoomLevel;
+
                 const delta = clock.getDelta(); if (mixer) mixer.update(delta);
                 renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
+                
+                // UI Overlay
                 ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
-                ctx.fillText("@" + selectedArtist, 50, 1000); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
+                ctx.fillText("@" + selectedArtist, 50, 1000); 
+                
+                // ZOOM UI
+                drawZoomUI();
+
+                ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
             } else if (gameState === "hire") {
                 drawFit(assets.hireBg); drawHeader("HIRE TALENT"); drawHireEntry(hireList[0], 250);
                 ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
@@ -178,6 +192,27 @@
                 ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
             }
             requestAnimationFrame(update);
+        }
+
+        function drawZoomUI() {
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(610, 150, 80, 210);
+            
+            ctx.fillStyle = "white";
+            ctx.font = "bold 20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("ZOOM", 650, 180);
+            ctx.fillText(Math.round((maxZoom - zoomLevel) / 5) + "%", 650, 350);
+
+            // Plus Button
+            ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+            ctx.strokeRect(620, 200, 60, 60);
+            ctx.font = "bold 40px Arial";
+            ctx.fillText("+", 650, 245);
+
+            // Minus Button
+            ctx.strokeRect(620, 280, 60, 60);
+            ctx.fillText("-", 650, 325);
         }
 
         // --- HELPERS ---
