@@ -46,10 +46,10 @@
         // --- 3D ENGINE SETUP ---
         const scene = new THREE.Scene();
         
-        // Lighting required for MeshStandardMaterial
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        // Lights are necessary for the internal GLB materials to show correctly
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
         scene.add(ambientLight);
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
         sunLight.position.set(5, 10, 7);
         scene.add(sunLight);
 
@@ -60,24 +60,22 @@
         renderer.setSize(720, 1280);
         const threeCanvas = renderer.domElement;
 
-        const textureLoader = new THREE.TextureLoader();
-        // FIXED: Extension changed to .png
-        const charTexture = textureLoader.load('texture_pbr_v128.png');
-
+        let mixer, clock = new THREE.Clock();
         const loader = new THREE.GLTFLoader(); 
         
         loader.load('Salsa.glb', (gltf) => {
             const object = gltf.scene;
             
+            // We no longer override child.material with textureLoader
+            // This preserves the internal textures of Salsa.glb
             object.traverse((child) => { 
                 if (child.isMesh) {
-                    child.material = new THREE.MeshStandardMaterial({ 
-                        map: charTexture
-                    });
+                    child.castShadow = true;
+                    child.receiveShadow = true;
                 }
             });
 
-            // Centering and Scaling Logic
+            // Centering and Scaling
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
@@ -87,8 +85,14 @@
             object.position.z = -center.z;
 
             const maxDim = Math.max(size.x, size.y, size.z);
-            object.scale.setScalar(500 / maxDim);
+            object.scale.setScalar(550 / maxDim);
 
+            // Re-enabling the Animation Mixer for movement
+            mixer = new THREE.AnimationMixer(object);
+            if (gltf.animations && gltf.animations.length > 0) {
+                mixer.clipAction(gltf.animations[0]).play();
+            }
+            
             camera.lookAt(0, 0, 0);
             scene.add(object);
         }, undefined, (err) => {
@@ -115,7 +119,7 @@
                 if (mouseX >= 560 && mouseY >= 1100) gameState = "video";
                 if (mouseY >= 280 && mouseY <= 380 && hireList[0].hired) selectedArtist = hireList[0].name;
                 if (mouseY >= 480 && mouseY <= 580 && musicTracks[0].owned) selectedMusic = musicTracks[0].shortName;
-                if (mouseY >= 680 && mouseY <= 780) selectedDance = "STATIC";
+                if (mouseY >= 680 && mouseY <= 780) selectedDance = "SALSA";
                 if (mouseY >= 920 && mouseY <= 1080 && selectedArtist && selectedMusic && selectedDance) {
                     gameState = "live"; previewAudio.currentTime = 0; previewAudio.play();
                 }
@@ -150,6 +154,7 @@
                 ctx.fillText("HIRE", 190, 390); ctx.fillText("MUSIC", 530, 390); ctx.fillText("VIDEO", 360, 590);
             } else if (gameState === "live") {
                 drawFit(assets.liveBg);
+                const delta = clock.getDelta(); if (mixer) mixer.update(delta);
                 renderer.render(scene, camera); ctx.drawImage(threeCanvas, 0, 0);
                 ctx.fillStyle = "white"; ctx.textAlign = "left"; ctx.font = "bold 30px Arial";
                 ctx.fillText("@" + selectedArtist, 50, 1000); ctx.drawImage(assets.backBtn, 560, 1100, 120, 120);
